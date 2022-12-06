@@ -54,35 +54,22 @@ class LEIPNet(nn.Module):
     def __init__(self, num_classes, backbone="mobilenet", pretrained=True, downsample_factor=16):
         super(LEIPNet, self).__init__()
         if backbone=="xception":
-            #----------------------------------#
-            #   获得两个特征层
-            #   浅层特征    [128,128,256]
-            #   主干部分    [30,30,2048]
-            #----------------------------------#
+
             self.backbone = xception(downsample_factor=downsample_factor, pretrained=pretrained)
             in_channels = 2048
             low_level_channels = 256
         elif backbone=="mobilenet":
-            #----------------------------------#
-            #   获得两个特征层
-            #   浅层特征    [128,128,24]
-            #   主干部分    [30,30,320]
-            #----------------------------------#
+
             self.backbone = MobileNetV2(downsample_factor=downsample_factor, pretrained=pretrained)
             in_channels = 320
             low_level_channels = 24
         else:
             raise ValueError('Unsupported backbone - `{}`, Use mobilenet, xception.'.format(backbone))
 
-        #-----------------------------------------#
-        #   ASPP特征提取模块
-        #   利用不同膨胀率的膨胀卷积进行特征提取
-        #-----------------------------------------#
+
         self.stage1 = RSU4F(320, 32, 256)
         
-        #----------------------------------#
-        #   浅层特征边
-        #----------------------------------#
+
         self.shortcut_conv = nn.Sequential(
             nn.Conv2d(low_level_channels, 48, 1),
             nn.BatchNorm2d(48),
@@ -114,21 +101,14 @@ class LEIPNet(nn.Module):
 
     def forward(self, x):
         H, W = x.size(2), x.size(3)
-        #-----------------------------------------#
-        #   获得两个特征层
-        #   low_level_features: 浅层特征-进行卷积处理
-        #   x : 主干部分-利用ASPP结构进行加强特征提取
-        #-----------------------------------------#
+
         low_level_features = self.stem(x)
         low_level_features = self.S2(low_level_features)
         low_level_features = self.positioning(low_level_features)
         x = self.backbone(x)
         x = self.stage1(x)
         x = self.positioning(x)
-        #-----------------------------------------#
-        #   将加强特征边上采样
-        #   与浅层特征堆叠后利用卷积进行特征提取
-        #-----------------------------------------#
+
         x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode='bilinear', align_corners=True)
         P00 = self.ffm(low_level_features, x)
         x = self.oup(P00)
